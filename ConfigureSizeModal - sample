@@ -1,0 +1,288 @@
+import React, { useState, useRef, useEffect } from 'react'
+import { useProduct } from '../../hooks'
+import { useAddToCartModalContext } from '../../hooks/use-add-to-cart-modal'
+import ImageGallery from '../image-gallery'
+import {
+  Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay,
+  FormControl, FormLabel, Input, Switch, Flex,
+  VStack, Text, Button,
+  Tabs, TabList, TabPanels, TabPanel, HStack,
+} from '@chakra-ui/react'
+
+
+
+const convertFeetAndInToCm = (feet, inches) => {
+  return (Number(`${feet}.${inches}`) / 0.032808).toFixed(0);
+}
+
+const convertCmToFt = (centimeters) => {
+  const heightInFeet = (Number(centimeters) * 0.032808).toFixed(1);
+  if (heightInFeet.includes('.')) {
+    const [feet, inches] = heightInFeet.split('.');
+    return [feet, inches];
+  }
+
+  return heightInFeet;
+}
+
+
+const convertWeight = (unit, value) => {
+
+  if (unit === 'kg') {
+    return (Number(value) * 2.2).toFixed(0);
+  }
+
+  if (unit === 'lbs') {
+    return (Number(value) / 2.2).toFixed(0);
+  }
+}
+
+
+const ConfigureSizeModal = ({ product, isOpen, onClose, addToCart, ...props }) => {
+  const {
+    quantity,
+    variationParams,
+    variationAttributes,
+  } = useProduct(product);
+
+  const { onOpen: onAddToCartModalOpen } = useAddToCartModalContext();
+
+  const [heightUnit, setHeightUnit] = useState('cm');
+  const [height, setHeight] = useState({ cm: null, ft: null, inches: null });
+  const inputCm = useRef(height.cm);
+  const inputFt = useRef(height.ft);
+  const inputIn = useRef(height.inches);
+
+  const [weightUnit, setWeightUnit] = useState('kg');
+  const [weight, setWeight] = useState({ kg: '', lbs: '' });
+  const inputKg = useRef();
+  const inputLbs = useRef();
+
+  const [size, setSize] = useState({
+    letterSize: '', mixedSize: ''
+  });
+
+  const [isContinueClicked, setIsContinueClicked] = useState(false);
+
+  useEffect(() => {
+    inputCm.current && (inputCm.current.value = height.cm);
+    inputFt.current && (inputFt.current.value = height.ft);
+    inputIn.current && (inputIn.current.value = height.inches);
+
+  }, [heightUnit]);
+
+
+  useEffect(() => {
+    inputKg.current && (inputKg.current.value = weight.kg);
+    inputLbs.current && (inputLbs.current.value = weight.lbs);
+
+  }, [weightUnit])
+
+
+  const getFirstAvailableSize = () => {
+
+    const { name, value } = variationAttributes
+      .find(e => e.id === 'size' || e.id === 'accessorySize')
+      .values
+      .find(e => e.orderable === true)
+
+
+    setSize({ letterSize: name, mixedSize: value });
+  }
+
+
+  const handleCartItem = async () => {
+
+    const item = product.variants
+      .find(
+        variant => variant.orderable &&
+          variant.variationValues.color === variationParams.color &&
+          variant.variationValues.size === size.mixedSize || variant.variationValues.accessorySize === size.mixedSize
+      );
+
+    const itemsAdded = await addToCart(item, quantity);
+
+    onAddToCartModalOpen({
+      product,
+      itemsAdded
+    })
+
+    onClose()
+  }
+
+
+  const handleInputChange = (e) => {
+
+    switch (e.target.id) {
+      case 'input-cm': {
+        setHeight({ ...height, cm: e.target.value });
+      } break;
+
+      case 'input-ft': {
+        setHeight({ ...height, ft: e.target.value })
+      } break;
+
+      case 'input-in': {
+        setHeight({ ...height, inches: e.target.value })
+      }
+      case 'input-kg': {
+        setWeight({ ...weight, kg: e.target.value })
+      } break;
+
+      case 'input-lbs': {
+        setWeight({ ...weight, lbs: e.target.value })
+      } break;
+    }
+
+  }
+
+  const handleHeightUnitChange = () => {
+
+    if (heightUnit === 'cm') {
+      const result = convertCmToFt(height.cm);
+
+      if (Array.isArray(result)) {
+        const [ft, inch] = result;
+        setHeight({ ...height, ft: ft, inches: inch });
+      } else {
+        setHeight({ ...height, ft: result, inches: null });
+      }
+
+    } else {
+      const result = convertFeetAndInToCm(height.ft, height.inches)
+      setHeight({ ...height, cm: result });
+    }
+
+    return heightUnit === 'cm' ? setHeightUnit('ft') : setHeightUnit('cm')
+  }
+
+
+  const handleWeightUnitChange = () => {
+
+    if (weightUnit === 'kg') {
+      setWeight({ ...weight, lbs: convertWeight('kg', weight.kg) });
+    } else {
+      setWeight({ ...weight, kg: convertWeight('lbs', weight.lbs) });
+    }
+    return weightUnit === 'kg' ? setWeightUnit('lbs') : setWeightUnit('kg');
+  }
+
+
+  const handleCountinueClick = () => {
+    if (isContinueClicked) {
+      return setIsContinueClicked(false)
+    }
+    return setIsContinueClicked(true)
+  }
+
+
+  return (
+    <Modal size='2xl' isOpen={isOpen} onClose={onClose}>
+      <ModalOverlay />
+
+      <ModalContent>
+        <ModalBody py={10} bg='white'>
+          <Tabs align='center'>
+            <TabPanels>
+              {!isContinueClicked ?
+                <TabPanel>
+                  <Flex justify='space-evenly' alignItems='center'>
+                    <ImageGallery
+                      imageGroups={product.imageGroups}
+                      showOnlyThumbnail={true}
+                      selectedVariationAttributes={variationParams}
+                    />
+                    <FormControl width='17rem' alignItems='center'>
+
+                      <Flex direction='column' gap='7'>
+                        <VStack>
+                          <FormLabel htmlFor='feetUnit' m='0' w='full' fontSize='xl'>
+                            Height
+                          </FormLabel>
+                          <Flex align='center' gap='4'>
+                            <HStack pe='3' border='1px solid lightgray'>
+                              {heightUnit === 'cm' ?
+                                <>
+                                  <Input id='input-cm' name='cm' border='none' maxLength='3' ref={inputCm} onChange={handleInputChange} />
+                                  <FormLabel htmlFor='input-cm' mb='0' fontSize='md' >
+                                    cm
+                                  </FormLabel>
+                                </>
+                                :
+                                <>
+                                  <Input id='input-ft' name='ft' border='none' maxLength='1' ref={inputFt} onChange={handleInputChange} />
+                                  <FormLabel htmlFor='input-ft' mb='0' fontSize='md'>
+                                    ft
+                                  </FormLabel>
+                                  <Input id='input-in' border='none' maxLength='2' ref={inputIn} onChange={handleInputChange} />
+                                  <FormLabel htmlFor='input-in' mb='0' fontSize='md' >
+                                    in
+                                  </FormLabel>
+                                </>
+                              }
+                            </HStack>
+
+                            <Flex me='2' gap='2'>cm{
+                              <Switch type='submit' onChange={handleHeightUnitChange} id='heightSwitch' />
+                            }ft</Flex>
+                          </Flex>
+                        </VStack>
+
+
+                        <VStack>
+                          <FormLabel htmlFor='feetUnit' m='0' w='full' fontSize='xl'>
+                            Weight
+                          </FormLabel>
+                          <Flex align='center' gap='4'>
+                            <HStack pe='3' border='1px solid lightgray'>
+                              {weightUnit === 'kg' ?
+                                <>
+                                  <Input id='input-kg' border='none' maxLength='3' ref={inputKg} onChange={handleInputChange} />
+                                  <FormLabel htmlFor='input-kg' mb='0' fontSize='md' >
+                                    kg
+                                  </FormLabel>
+                                </> :
+                                <>
+                                  <Input id='input-lbs' border='none' maxLength='3' ref={inputLbs} onChange={handleInputChange} />
+                                  <FormLabel htmlFor='input-lbs' mb='0' fontSize='md'>
+                                    lbs
+                                  </FormLabel>
+                                </>
+                              }
+                            </HStack>
+                            <Flex gap='2' >kg{
+                              <Switch onChange={handleWeightUnitChange} id='weightSwitch' />
+                            }lbs</Flex>
+                          </Flex>
+                        </VStack>
+                      </Flex>
+                    </FormControl>
+                  </Flex>
+                </TabPanel> :
+                <TabPanel>
+                  <Text fontSize='2xl'>
+                    Based on your height, and weight.<br />Your best fit would be<br />
+                    <b> size {size.letterSize}</b>
+                  </Text>
+                </TabPanel>
+              }
+            </TabPanels>
+            <TabList pb='5'>
+              <Button me='5'
+                px='1.8rem'
+                id='continue-btn'
+                onClick={() => { handleCountinueClick(), getFirstAvailableSize() }}
+              >
+                {isContinueClicked ? 'Go Back' : 'Continue'}
+              </Button>
+              {isContinueClicked && <Button onClick={handleCartItem}>Add to Cart</Button>}
+            </TabList>
+          </Tabs>
+          <ModalCloseButton />
+        </ModalBody>
+      </ModalContent >
+    </Modal >
+  )
+}
+
+export default ConfigureSizeModal;
